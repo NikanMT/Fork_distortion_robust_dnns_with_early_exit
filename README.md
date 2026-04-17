@@ -10,16 +10,22 @@ pip install -r requirements.txt
 ```
 
 ## Table of contents
-* [Distorted Datasets](#distorted-datasets)
-* [Download Distorted Dataset](#download-distorted-dataset)
-* [Generate Distorted Dataset](#generate-distorted-dataset)
-* [Distortion Classifier](#distortion-classifier)
-* [Early-exit DNNs with expert branches](#early-exit-dnns-with-expert-branches)
-* [Experiments](#experiments)
-* [Accuracy](#accuracy)
-* [Offloading Probability](#offloading-probability)
-* [End-to-end Latency](#end-to-end-latency)
-* [Acknowledgments](#acknowledgments)
+- [Early-exits Deep Neural Networks (DNNs) with expert branches](#early-exits-deep-neural-networks-dnns-with-expert-branches)
+  - [Table of contents](#table-of-contents)
+  - [Distorted Datasets](#distorted-datasets)
+      - [Gaussian Blur](#gaussian-blur)
+      - [Gaussian Noise](#gaussian-noise)
+  - [Download Distorted Dataset](#download-distorted-dataset)
+  - [Generate Distorted Dataset](#generate-distorted-dataset)
+  - [Distortion Classifier](#distortion-classifier)
+    - [Download the dataset for distortion classifier](#download-the-dataset-for-distortion-classifier)
+    - [Generate the dataset for distortion classifier](#generate-the-dataset-for-distortion-classifier)
+    - [Training the distortion classifier](#training-the-distortion-classifier)
+  - [Early-exit DNNs with expert branches](#early-exit-dnns-with-expert-branches)
+  - [Experiments](#experiments)
+    - [Accuracy and Offloading Probability](#accuracy-and-offloading-probability)
+    - [End-to-end Latency](#end-to-end-latency)
+  - [Acknowledgments](#acknowledgments)
 
 ## Distorted Datasets
 
@@ -30,13 +36,14 @@ We describe next these two distortion types.
 This image distortion occurs in an image when the camera is out of focus or in a foggy environment. The parameter ![equation](https://latex.codecogs.com/svg.image?\sigma_{GB}) defines the blur distortion level, so that a higher ![equation](https://latex.codecogs.com/svg.image?\sigma_{GB}) implies a more blurred image. This work uses ![equation](https://latex.codecogs.com/svg.image?\sigma_{GB}) from 1 to 5, with a step of 1. For each blur level, the kernel size is given by ![equation](https://latex.codecogs.com/svg.image?4\cdot\sigma_{GB}&plus;1). As mentioned before, we use the OpenCV library to apply blur distortion into the images from Caltech-256. 
 The following image shows an example of a blurred image from the dataset with several blur levels.
 
-![Blurred Image](https://github.com/pachecobeto95/distortion_robust_dnns_with_early_exit/blob/main/imgs_read_me/blur_monkey_levels.png)
+![Blurred Image](https://raw.githubusercontent.com/pachecobeto95/distortion_robust_dnns_with_early_exit/main/imgs_read_me/blur_monkey_levels.png)
+
 
 #### Gaussian Noise
 This distortion may appear in an image due to poor illumination conditions and the use of a low-quality image sensor. We use ![equation](https://latex.codecogs.com/svg.image?\sigma_{GN}) to define the noise distortion level, so that a higher ![equation](https://latex.codecogs.com/svg.image?\sigma_{GN}) implies a noisier image.
 This work uses ![equation](https://latex.codecogs.com/png.image?\dpi{110}&space;\sigma_{GB}\in(1,&space;2,&space;3,&space;4,&space;5)). We use Numpy library to apply gaussian noise into the images. The following image shows an example of a noisy image from the dataset with several noise levels.
 
-![Noisy Image](https://github.com/pachecobeto95/distortion_robust_dnns_with_early_exit/blob/main/imgs_read_me/noise_monkey_levels.png)
+![Noisy Image](https://raw.githubusercontent.com/pachecobeto95/distortion_robust_dnns_with_early_exit/main/imgs_read_me/noise_monkey_levels.png)
 
 ## Download Distorted Dataset
 
@@ -122,7 +129,8 @@ The model can be downloaded from the following link. Also, as an alternative, we
 
 The link of the blur expert model contains the early-exit DNN with branches expert in blurred images. Likewise, The link of the noise expert model contains the early-exit DNN with branches expert in noisy images.
 
-![Early-exit DNN with expert branches](https://github.com/pachecobeto95/distortion_robust_dnns_with_early_exit/blob/main/imgs_read_me/robust_dnn_with_early_exit_alternative.png)
+![Early-exit DNN with expert branches](https://raw.githubusercontent.com/pachecobeto95/distortion_robust_dnns_with_early_exit/main/imgs_read_me/robust_dnn_with_early_exit_alternative.png)
+
 
 To fine-tune the early-exit DNN for each distortion type, follow the procedures below:
 1. Change the current directory to the ```./experiment```
