@@ -17,7 +17,6 @@ from torchvision import transforms, utils, datasets
 from torch.utils.data import Dataset, DataLoader, random_split, SubsetRandomSampler
 import copy
 import matplotlib.pyplot as plt
-from utils import LoadDataset
 from PIL import Image
 import argparse
 
@@ -173,7 +172,6 @@ class QualityConverter():
   
   def mixedDistortion(self, blur_lvl_list, noise_lvl_list, end=10000):
     self.distortion_type = "mixed_distortion"
-
     for i, (img, label) in enumerate(self.dataLoader):
       print(i)
       blur_lvl = blur_lvl_list[np.random.choice(len(blur_lvl_list), 1)[0]]

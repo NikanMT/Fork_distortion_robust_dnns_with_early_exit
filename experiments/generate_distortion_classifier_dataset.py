@@ -1,3 +1,7 @@
+
+# Remember if u want to use this code again: Change the path to distortion_classifier_dataset.
+# And only one subfolder. otherwise just do it manually. 
+
 import os
 import torch
 import torch.nn as nn
