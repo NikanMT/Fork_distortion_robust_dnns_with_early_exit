@@ -57,23 +57,24 @@ class AddBlurNoise(object):
     self.noise_list = noise_list
 
   def __call__(self, img):
-    image = np.array(img)
+    
+    r = np.random.choice(2, 1)[0]
 
-    blur_std = self.blur_list[np.random.choice(len(self.blur_list))]
-    image = cv2.GaussianBlur(
-        image,
-        (4*blur_std+1, 4*blur_std+1),
-        blur_std,
-        None,
-        blur_std,
-        cv2.BORDER_CONSTANT
-    )
+    if(r == 0):
+      image = np.array(img)
+      self.std = self.blur_list[np.random.choice(len(self.blur_list), 1)[0]]
+      blur = cv2.GaussianBlur(image, (4*self.std+1, 4*self.std+1), self.std, None, self.std, cv2.BORDER_CONSTANT)
+      return Image.fromarray(blur) 
 
-    noise_std = self.noise_list[np.random.choice(len(self.noise_list))]
-    image = image + np.random.normal(0, noise_std, image.shape)
-    image = np.clip(image, 0, 255)
+    else:
+      image = np.array(img)
+      self.std = self.noise_list[np.random.choice(len(self.noise_list), 1)[0]]
+      noise_img = image + np.random.normal(0, self.std, (image.shape[0], image.shape[1], image.shape[2]))
+      return Image.fromarray(np.uint8(noise_img)) 
 
-    return Image.fromarray(np.uint8(image))
+
+  def __repr__(self):
+    return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
 
 
 def save_idx(train_idx, val_idx, savePath):
@@ -209,7 +210,7 @@ args = parser.parse_args()
 
 root_dir = args.root_path
 seed = 42
-distortion_type = args.distortion_type
+distortion_type = "gaussian_blur"
 dataset_path = os.path.join(".", "dataset", "256_ObjectCategories")
 batch_size = 32
 model_name = "mobilenet"
@@ -227,30 +228,17 @@ mean, std = [0.457342265910642, 0.4387686270106377, 0.4073427106250871],[0.26753
 #  distortion_list = [5, 10, 20, 30, 40]
 #  distortion_app = AddGaussianNoise
 
+distortion_app = AddBlurNoise
 blur_list = [1, 2, 3, 4, 5]
 noise_list = [5, 10, 20, 30, 40]
 
-if distortion_type == "gaussian_blur":
-  distortion_transform = AddGaussianBlur(blur_list, 0)
-
-elif distortion_type == "gaussian_noise":
-  distortion_transform = AddGaussianNoise(noise_list, 0)
-
-elif distortion_type == "blur_noise":
-  distortion_transform = AddBlurNoise(blur_list, noise_list, 0)
-
-else:
-  distortion_transform = None
-
 root_dir = os.path.join(root_dir, model_name, dataset_name)
 
-model_save_path = os.path.join(
-    ".",
-    f"{distortion_type}_model_{model_name}_{dataset_name}_{model_id}.pth"
-)
+model_save_path = os.path.join(".", "all_distortion_distorted_model_%s_%s_%s2.pth"%(model_name, dataset_name, model_id))
 #savePath_idx_dataset = os.path.join(root_dir, "save_idx_b_%s_%s_%s.npy"%(model_name, dataset_name, model_id))
 savePath_idx_dataset = os.path.join(".", "save_idx_b_%s_%s_%s.npy"%(model_name, dataset_name, model_id))
 #pristine_model_path = os.path.join(root_dir, "pristine_model_b_mobilenet_caltech_21.pth")
+pristine_model_path = os.path.join(".", "pristine_ee_model_mobilenet_3_branches_id_1.pth")
 df_history_save_path = os.path.join(root_dir, "history_distorted_%s_%s_%s_%s.csv"%(distortion_type, model_name, dataset_name, model_id))
 
 
@@ -258,47 +246,22 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 np.random.seed(seed)
 torch.manual_seed(seed)
 
-if distortion_type == "pristine":
-  distorted_transf_train = transforms.Compose([
-      transforms.Resize((300, 300)),
-      transforms.RandomChoice([
-          transforms.ColorJitter(brightness=(0.80, 1.20)),
-          transforms.RandomGrayscale(p=0.25)
-      ]),
-      transforms.RandomHorizontalFlip(p=0.25),
-      transforms.RandomRotation(25),
-      transforms.ToTensor(),
-      transforms.Normalize(mean=mean, std=std),
-  ])
-
-  distorted_transf_valid = transforms.Compose([
-      transforms.Resize(330),
-      transforms.CenterCrop(300),
-      transforms.ToTensor(),
-      transforms.Normalize(mean=mean, std=std),
-  ])
-
-else:
-  distorted_transf_train = transforms.Compose([
-      transforms.Resize((300, 300)),
-      transforms.RandomApply([distortion_transform], p=0.5),
-      transforms.RandomChoice([
-          transforms.ColorJitter(brightness=(0.80, 1.20)),
-          transforms.RandomGrayscale(p=0.25)
-      ]),
-      transforms.RandomHorizontalFlip(p=0.25),
-      transforms.RandomRotation(25),
-      transforms.ToTensor(),
-      transforms.Normalize(mean=mean, std=std),
-  ])
-
-  distorted_transf_valid = transforms.Compose([
-      transforms.Resize(330),
-      transforms.CenterCrop(300),
-      transforms.RandomApply([distortion_transform], p=0.5),
-      transforms.ToTensor(),
-      transforms.Normalize(mean=mean, std=std),
-  ])
+distorted_transf_train = transforms.Compose([transforms.Resize((300, 300)),
+                                             transforms.RandomApply([distortion_app(blur_list, noise_list, 0)], p=0.5),
+                                             transforms.RandomChoice([
+                                                                      transforms.ColorJitter(brightness=(0.80, 1.20)),
+                                                                      transforms.RandomGrayscale(p = 0.25)]),
+                                             transforms.RandomHorizontalFlip(p = 0.25),
+                                             transforms.RandomRotation(25),
+                                             transforms.ToTensor(), 
+                                             transforms.Normalize(mean = mean, std = std),])
+        
+distorted_transf_valid = transforms.Compose([
+                                             transforms.Resize(330), 
+                                             transforms.CenterCrop(300),
+                                             transforms.RandomApply([distortion_app(blur_list, noise_list, 0)], p=0.5), 
+                                             transforms.ToTensor(),
+                                             transforms.Normalize(mean = mean, std = std),])
 
 
 train_loader, val_loader = load_caltech(dataset_path, distorted_transf_train, distorted_transf_valid, 
@@ -316,15 +279,8 @@ weight_decay = 0.0005
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-branchynet = B_MobileNet(n_classes, True, n_branches, img_dim, exit_type, device)
-
-if distortion_type != "pristine":
-  checkpoint = torch.load(
-      f"pristine_model_{model_name}_{dataset_name}_{model_id}.pth",
-      map_location=device
-  )
-  branchynet.load_state_dict(checkpoint["model_state_dict"])
-
+branchynet = B_MobileNet(n_classes, False, n_branches, img_dim, exit_type, device)
+branchynet.load_state_dict(torch.load(pristine_model_path)["model_state_dict"])
 branchynet = branchynet.to(device)
 
 criterion = nn.CrossEntropyLoss()
