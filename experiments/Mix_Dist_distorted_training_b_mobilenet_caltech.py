@@ -1,3 +1,14 @@
+
+# Changes from the original model: 
+
+# Used MobileNetV2 trained on ImageNet (another similar dataset), since the authors did not provide 
+# access to their trained backbone, and training it would take a long time, without
+# significant difference in comparison fairness in testing the two models.  
+# Might slightly change the expert branch architectures, if we see fit later. 
+# Added torch.no_grad() to the validation, since validation does not require gradients or any 
+# backpropagation, so the GPU memory usage becomes high unnecessarily and validating becomes slower.
+
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -17,6 +28,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 import torchvision.datasets.voc as voc
 from torch.utils.data import Dataset, DataLoader, random_split, SubsetRandomSampler
 from pthflops import count_ops
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from mobileNet import B_MobileNet
 import cv2
 from PIL import Image
@@ -31,7 +44,8 @@ class AddGaussianNoise(object):
     image = np.array(img)
     self.std = self.distortion_list[np.random.choice(len(self.distortion_list), 1)[0]]
     noise_img = image + np.random.normal(0, self.std, (image.shape[0], image.shape[1], image.shape[2]))
-    return Image.fromarray(np.uint8(noise_img)) 
+    noise_img = np.clip(noise_img, 0, 255)
+    return Image.fromarray(np.uint8(noise_img))
     
   def __repr__(self):
     return self.__class__.__name__ + '(mean={0}, std={1})'.format(self.mean, self.std)
@@ -108,6 +122,7 @@ def load_caltech(root_path, transf_train, transf_valid, batch_size,savePath_idx_
   else:
     nr_samples = len(dataset)
     indices = list(range(nr_samples))
+
     split = int(np.floor(split_train * nr_samples))
     np.random.shuffle(indices)
     train_idx, valid_idx = indices[:split], indices[split:]
@@ -118,7 +133,7 @@ def load_caltech(root_path, transf_train, transf_valid, batch_size,savePath_idx_
   val_data = torch.utils.data.Subset(val_dataset, indices=valid_idx)
 
   trainLoader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, 
-                                            num_workers=0)
+                                          shuffle=True, num_workers=0)
   valLoader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, 
                                             num_workers=0)
 
@@ -150,7 +165,6 @@ def trainBranches(model, train_loader, optimizer, criterion, n_branches, epoch, 
 
     # clear variables
     del data, target, output_list, conf_list, class_list
-    torch.cuda.empty_cache()
 
   loss = round(np.average(running_loss), 4)
   print("Epoch: %s"%(epoch))
@@ -168,33 +182,33 @@ def evalBranches(model, val_loader, criterion, n_branches, epoch, device):
   val_acc_dict = {i: [] for i in range(1, (n_branches+1)+1)}
   model.eval()
 
-  for i, (data, target) in enumerate(val_loader, 1):
-    data, target = data.to(device), target.long().to(device)
+  with torch.no_grad():
+    for i, (data, target) in enumerate(val_loader, 1):
+      data, target = data.to(device), target.long().to(device)
 
-    output_list, conf_list, class_list = model(data)
+      output_list, conf_list, class_list = model(data)
 
-    loss = 0
-    for j, (output, inf_class, weight) in enumerate(zip(output_list, class_list, loss_weights), 1):
-      loss += weight*criterion(output, target)
-      val_acc_dict[j].append(100*inf_class.eq(target.view_as(inf_class)).sum().item()/target.size(0))
+      loss = 0
+      for j, (output, inf_class, weight) in enumerate(zip(output_list, class_list, loss_weights), 1):
+        loss += weight*criterion(output, target)
+        val_acc_dict[j].append(100*inf_class.eq(target.view_as(inf_class)).sum().item()/target.size(0))
 
 
-    running_loss.append(float(loss.item()))    
+      running_loss.append(float(loss.item()))    
 
-    # clear variables
-    del data, target, output_list, conf_list, class_list
-    torch.cuda.empty_cache()
+      # clear variables
+      del data, target, output_list, conf_list, class_list
 
-  loss = round(np.average(running_loss), 4)
-  print("Epoch: %s"%(epoch))
-  print("Val Loss: %s"%(loss))
+    loss = round(np.average(running_loss), 4)
+    print("Epoch: %s"%(epoch))
+    print("Val Loss: %s"%(loss))
 
-  result_dict = {"epoch":epoch, "val_loss": loss}
-  for key, value in val_acc_dict.items():
-    result_dict.update({"val_acc_branch_%s"%(key): round(np.average(val_acc_dict[key]), 4)})    
-    print("Val Acc Branch %s: %s"%(key, result_dict["val_acc_branch_%s"%(key)]))
-  
-  return result_dict
+    result_dict = {"epoch":epoch, "val_loss": loss}
+    for key, value in val_acc_dict.items():
+      result_dict.update({"val_acc_branch_%s"%(key): round(np.average(val_acc_dict[key]), 4)})    
+      print("Val Acc Branch %s: %s"%(key, result_dict["val_acc_branch_%s"%(key)]))
+    
+    return result_dict
 
 
 parser = argparse.ArgumentParser(description='Evaluating DNNs perfomance using distorted image: blur ou gaussian noise')
@@ -243,15 +257,19 @@ else:
   distortion_transform = None
 
 root_dir = os.path.join(root_dir, model_name, dataset_name)
+results_dir = os.path.join(".", "results")
 
 model_save_path = os.path.join(
-    ".",
-    f"{distortion_type}_model_{model_name}_{dataset_name}_{model_id}.pth"
+    results_dir,
+    f"Mix_Dist_{distortion_type}_model_{model_name}_{dataset_name}_{model_id}.pth"
 )
 #savePath_idx_dataset = os.path.join(root_dir, "save_idx_b_%s_%s_%s.npy"%(model_name, dataset_name, model_id))
 savePath_idx_dataset = os.path.join(".", "save_idx_b_%s_%s_%s.npy"%(model_name, dataset_name, model_id))
 #pristine_model_path = os.path.join(root_dir, "pristine_model_b_mobilenet_caltech_21.pth")
-df_history_save_path = os.path.join(root_dir, "history_distorted_%s_%s_%s_%s.csv"%(distortion_type, model_name, dataset_name, model_id))
+df_history_save_path = os.path.join(
+    results_dir,
+    f"Mix_Dist_history_distorted_{distortion_type}_{model_name}_{dataset_name}_{model_id}.csv"
+)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -320,8 +338,11 @@ branchynet = B_MobileNet(n_classes, True, n_branches, img_dim, exit_type, device
 
 if distortion_type != "pristine":
   checkpoint = torch.load(
-      f"pristine_model_{model_name}_{dataset_name}_{model_id}.pth",
-      map_location=device
+    os.path.join(
+      results_dir,
+      f"Mix_Dist_pristine_model_{model_name}_{dataset_name}_{model_id}.pth"
+    ),
+    map_location=device
   )
   branchynet.load_state_dict(checkpoint["model_state_dict"])
 
@@ -343,7 +364,7 @@ loss_weights = [1, 1, 1, 1]
 epoch = 0
 count = 0
 best_val_loss = np.inf
-patience = 10
+patience = 5
 
 df = pd.DataFrame()
 while 1:
@@ -355,7 +376,7 @@ while 1:
   result.update(evalBranches(branchynet, val_loader, criterion, n_branches, epoch, device))
 
   df = df.append(pd.Series(result), ignore_index=True)
-  #df.to_csv(history_save_path)
+  df.to_csv(df_history_save_path, index=False)
 
   if (result["val_loss"] < best_val_loss):
     best_val_loss = result["val_loss"]
