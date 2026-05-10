@@ -338,7 +338,7 @@ if distortion_type != "pristine":
   checkpoint = torch.load(
     os.path.join(
       results_dir,
-      f"Original_pristine_model_{model_name}_{dataset_name}_{model_id}.pth"
+      f"Mix_Dist_pristine_model_{model_name}_{dataset_name}_{model_id}.pth"
     ),
     map_location=device
   )
