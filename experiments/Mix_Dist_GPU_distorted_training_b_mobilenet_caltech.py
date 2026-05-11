@@ -7,6 +7,8 @@
 # Might slightly change the expert branch architectures, if we see fit later. 
 # Added torch.no_grad() to the validation, since validation does not require gradients or any 
 # backpropagation, so the GPU memory usage becomes high unnecessarily and validating becomes slower.
+# Here we trained the mobilenetV2 on the actual caltech256 images rather than directly using the 
+# pretrained V2 on the imagenet, to get better accuracies, like the original paper.  
 
 
 import torch
@@ -133,9 +135,9 @@ def load_caltech(root_path, transf_train, transf_valid, batch_size,savePath_idx_
   val_data = torch.utils.data.Subset(val_dataset, indices=valid_idx)
 
   trainLoader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, 
-                                          shuffle=True, num_workers=0)
+                                          shuffle=True, num_workers=4)
   valLoader = torch.utils.data.DataLoader(val_data, batch_size=batch_size, 
-                                            num_workers=0)
+                                            num_workers=4)
 
   return trainLoader, valLoader
 
@@ -165,7 +167,6 @@ def trainBranches(model, train_loader, optimizer, criterion, n_branches, epoch, 
 
     # clear variables
     del data, target, output_list, conf_list, class_list
-    torch.cuda.empty_cache()
 
   loss = round(np.average(running_loss), 4)
   print("Epoch: %s"%(epoch))
@@ -199,7 +200,6 @@ def evalBranches(model, val_loader, criterion, n_branches, epoch, device):
 
       # clear variables
       del data, target, output_list, conf_list, class_list
-      torch.cuda.empty_cache()
 
     loss = round(np.average(running_loss), 4)
     print("Epoch: %s"%(epoch))
@@ -344,7 +344,8 @@ if distortion_type != "pristine":
       results_dir,
       f"Mix_Dist_pristine_model_{model_name}_{dataset_name}_{model_id}.pth"
     ),
-    map_location=device
+    map_location=device,
+    weights_only=False
   )
   branchynet.load_state_dict(checkpoint["model_state_dict"])
 
@@ -352,11 +353,24 @@ branchynet = branchynet.to(device)
 
 criterion = nn.CrossEntropyLoss()
 
-for param in branchynet.stages.parameters():
-  param.requires_grad = False
+if distortion_type == "pristine":
+  for param in branchynet.stages.parameters():
+    param.requires_grad = True
+else:
+  for param in branchynet.stages.parameters():
+    param.requires_grad = False
 
-optimizer = optim.Adam([{'params': branchynet.exits.parameters(), 'lr': lr[1]},
-                        {'params': branchynet.fully_connected.parameters(), 'lr': lr[1]}], weight_decay=weight_decay)
+if distortion_type == "pristine":
+  optimizer = optim.Adam([
+      {'params': branchynet.stages.parameters(), 'lr': lr[0]},
+      {'params': branchynet.exits.parameters(), 'lr': lr[1]},
+      {'params': branchynet.fully_connected.parameters(), 'lr': lr[1]}
+  ], weight_decay=weight_decay)
+else:
+  optimizer = optim.Adam([
+      {'params': branchynet.exits.parameters(), 'lr': lr[1]},
+      {'params': branchynet.fully_connected.parameters(), 'lr': lr[1]}
+  ], weight_decay=weight_decay)
 
 
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=0, last_epoch=-1)
@@ -377,7 +391,7 @@ while 1:
   scheduler.step()
   result.update(evalBranches(branchynet, val_loader, criterion, n_branches, epoch, device))
 
-  df = df.append(pd.Series(result), ignore_index=True)
+  df = pd.concat([df, pd.DataFrame([result])], ignore_index=True)
   df.to_csv(df_history_save_path, index=False)
 
   if (result["val_loss"] < best_val_loss):
