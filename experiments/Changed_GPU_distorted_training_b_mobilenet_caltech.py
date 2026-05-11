@@ -177,21 +177,22 @@ def evalBranches(model, val_loader, criterion, n_branches, epoch, device):
   val_acc_dict = {i: [] for i in range(1, (n_branches+1)+1)}
   model.eval()
 
-  for i, (data, target) in enumerate(val_loader, 1):
-    data, target = data.to(device), target.long().to(device)
+  with torch.no_grad():
+    for i, (data, target) in enumerate(val_loader, 1):
+      data, target = data.to(device), target.long().to(device)
 
-    output_list, conf_list, class_list = model(data)
+      output_list, conf_list, class_list = model(data)
 
-    loss = 0
-    for j, (output, inf_class, weight) in enumerate(zip(output_list, class_list, loss_weights), 1):
-      loss += weight*criterion(output, target)
-      val_acc_dict[j].append(100*inf_class.eq(target.view_as(inf_class)).sum().item()/target.size(0))
+      loss = 0
+      for j, (output, inf_class, weight) in enumerate(zip(output_list, class_list, loss_weights), 1):
+        loss += weight*criterion(output, target)
+        val_acc_dict[j].append(100*inf_class.eq(target.view_as(inf_class)).sum().item()/target.size(0))
 
 
-    running_loss.append(float(loss.item()))    
+      running_loss.append(float(loss.item()))    
 
-    # clear variables
-    del data, target, output_list, conf_list, class_list
+      # clear variables
+      del data, target, output_list, conf_list, class_list
 
   loss = round(np.average(running_loss), 4)
   print("Epoch: %s"%(epoch))
