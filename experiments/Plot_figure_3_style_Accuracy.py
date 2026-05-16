@@ -102,7 +102,7 @@ def make_loader(dataset_path, index_path, blur_level, noise_level, batch_size):
         dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0
+        num_workers=4
     )
 
     return loader
